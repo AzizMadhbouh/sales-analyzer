@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flake8 black mypy safety
+          pip install flake8 black mypy safety bandit
           pip install -r requirements.txt
 
       - name: Check formatting with black
@@ -34,6 +34,9 @@ jobs:
 
       - name: Check dependencies for vulnerabilities
         run: python -m safety check
+
+      - name: Security scan with bandit
+        run: python -m bandit -r src/
 
   test:
     runs-on: ubuntu-latest
