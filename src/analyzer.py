@@ -23,7 +23,7 @@ def get_top_products(data: list[dict], n: int = 3) -> list[tuple[str, float]]:
 
     Returns list of (product_name, total_revenue) tuples.
     """
-    product_revenue = defaultdict(float)
+    product_revenue: defaultdict[str, float] = defaultdict(float)
 
     for row in data:
         revenue = row["quantity"] * row["price"]
@@ -40,7 +40,7 @@ def get_top_products(data: list[dict], n: int = 3) -> list[tuple[str, float]]:
 
 def get_daily_sales(data: list[dict]) -> dict[str, float]:
     """Group sales by date and calculate daily totals."""
-    daily = defaultdict(float)
+    daily: defaultdict[str, float] = defaultdict(float)
 
     for row in data:
         revenue = row["quantity"] * row["price"]
@@ -51,7 +51,7 @@ def get_daily_sales(data: list[dict]) -> dict[str, float]:
 
 def get_quantity_by_product(data: list[dict]) -> dict[str, int]:
     """Get total quantity sold per product."""
-    quantities = defaultdict(int)
+    quantities: defaultdict[str, int] = defaultdict(int)
 
     for row in data:
         quantities[row["product"]] += row["quantity"]
