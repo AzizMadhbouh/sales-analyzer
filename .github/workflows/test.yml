@@ -19,13 +19,16 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install flake8 black
+        run: pip install flake8 black mypy
 
       - name: Check formatting with black
         run: python -m black --check src/ tests/
 
       - name: Lint with flake8
         run: python -m flake8 src/ tests/
+
+      - name: Type check with mypy
+        run: python -m mypy src/
 
   test:
     runs-on: ubuntu-latest
