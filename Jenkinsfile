@@ -5,6 +5,7 @@ pipeline {
         stage('Setup') {
             steps {
                 bat 'python -m venv venv'
+                bat 'venv\\Scripts\\activate && python -m pip install --upgrade pip'
                 bat 'venv\\Scripts\\activate && pip install -r requirements.txt'
                 bat 'venv\\Scripts\\activate && pip install flake8 black mypy safety bandit'
             }
@@ -20,7 +21,7 @@ pipeline {
 
         stage('Security') {
             steps {
-                bat 'venv\\Scripts\\activate && python -m safety check'
+                bat 'venv\\Scripts\\activate && python -m safety scan'
                 bat 'venv\\Scripts\\activate && python -m bandit -r src/'
             }
         }
