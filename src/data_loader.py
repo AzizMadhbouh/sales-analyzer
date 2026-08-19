@@ -36,13 +36,15 @@ def validate_sales_data(data: list[dict]) -> list[dict]:
     cleaned = []
     for row in data:
         try:
-            cleaned.append({
-                "date": row["date"],
-                "product": row["product"],
-                "quantity": int(row["quantity"]),
-                "price": float(row["price"]),
-            })
-        except (ValueError, KeyError) as e:
+            cleaned.append(
+                {
+                    "date": row["date"],
+                    "product": row["product"],
+                    "quantity": int(row["quantity"]),
+                    "price": float(row["price"]),
+                }
+            )
+        except (ValueError, KeyError):
             continue
 
     return cleaned

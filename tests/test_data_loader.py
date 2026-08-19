@@ -76,9 +76,24 @@ class TestValidateSalesData:
     def test_validate_skips_bad_rows(self):
         """Should skip rows with invalid data."""
         mixed_data = [
-            {"date": "2026-01-15", "product": "Widget A", "quantity": "10", "price": "29.99"},
-            {"date": "2026-01-15", "product": "Widget B", "quantity": "invalid", "price": "49.99"},
-            {"date": "2026-01-15", "product": "Widget C", "quantity": "5", "price": "99.99"},
+            {
+                "date": "2026-01-15",
+                "product": "Widget A",
+                "quantity": "10",
+                "price": "29.99",
+            },
+            {
+                "date": "2026-01-15",
+                "product": "Widget B",
+                "quantity": "invalid",
+                "price": "49.99",
+            },
+            {
+                "date": "2026-01-15",
+                "product": "Widget C",
+                "quantity": "5",
+                "price": "99.99",
+            },
         ]
 
         result = validate_sales_data(mixed_data)

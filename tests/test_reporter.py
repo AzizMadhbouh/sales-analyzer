@@ -1,4 +1,3 @@
-import pytest
 from src.reporter import generate_csv_report, generate_text_report
 
 

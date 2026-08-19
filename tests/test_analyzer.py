@@ -1,4 +1,3 @@
-import pytest
 from src.analyzer import (
     calculate_average_order_value,
     calculate_total_sales,

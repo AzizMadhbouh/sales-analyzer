@@ -54,14 +54,18 @@ def generate_csv_report(data: list[dict], output_path: str) -> None:
     import csv
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["date", "product", "quantity", "price", "revenue"])
+        writer = csv.DictWriter(
+            f, fieldnames=["date", "product", "quantity", "price", "revenue"]
+        )
         writer.writeheader()
 
         for row in data:
-            writer.writerow({
-                "date": row["date"],
-                "product": row["product"],
-                "quantity": row["quantity"],
-                "price": row["price"],
-                "revenue": round(row["quantity"] * row["price"], 2),
-            })
+            writer.writerow(
+                {
+                    "date": row["date"],
+                    "product": row["product"],
+                    "quantity": row["quantity"],
+                    "price": row["price"],
+                    "revenue": round(row["quantity"] * row["price"], 2),
+                }
+            )
