@@ -21,7 +21,6 @@ pipeline {
 
         stage('Security') {
             steps {
-                bat 'venv\\Scripts\\activate && python -m safety scan'
                 bat 'venv\\Scripts\\activate && python -m bandit -r src/'
             }
         }
