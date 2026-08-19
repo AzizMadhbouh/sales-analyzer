@@ -4,30 +4,30 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                sh 'python -m venv venv'
-                sh '. venv/bin/activate && pip install -r requirements.txt'
-                sh '. venv/bin/activate && pip install flake8 black mypy safety bandit'
+                bat 'python -m venv venv'
+                bat 'venv\\Scripts\\activate && pip install -r requirements.txt'
+                bat 'venv\\Scripts\\activate && pip install flake8 black mypy safety bandit'
             }
         }
 
         stage('Lint') {
             steps {
-                sh '. venv/bin/activate && python -m black --check src/ tests/'
-                sh '. venv/bin/activate && python -m flake8 src/ tests/'
-                sh '. venv/bin/activate && python -m mypy src/'
+                bat 'venv\\Scripts\\activate && python -m black --check src/ tests/'
+                bat 'venv\\Scripts\\activate && python -m flake8 src/ tests/'
+                bat 'venv\\Scripts\\activate && python -m mypy src/'
             }
         }
 
         stage('Security') {
             steps {
-                sh '. venv/bin/activate && python -m safety check'
-                sh '. venv/bin/activate && python -m bandit -r src/'
+                bat 'venv\\Scripts\\activate && python -m safety check'
+                bat 'venv\\Scripts\\activate && python -m bandit -r src/'
             }
         }
 
         stage('Test') {
             steps {
-                sh '. venv/bin/activate && python -m pytest'
+                bat 'venv\\Scripts\\activate && python -m pytest'
             }
         }
     }
