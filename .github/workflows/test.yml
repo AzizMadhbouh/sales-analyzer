@@ -19,7 +19,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install flake8 black mypy
+        run: |
+          pip install flake8 black mypy safety
+          pip install -r requirements.txt
 
       - name: Check formatting with black
         run: python -m black --check src/ tests/
@@ -29,6 +31,9 @@ jobs:
 
       - name: Type check with mypy
         run: python -m mypy src/
+
+      - name: Check dependencies for vulnerabilities
+        run: python -m safety check
 
   test:
     runs-on: ubuntu-latest
