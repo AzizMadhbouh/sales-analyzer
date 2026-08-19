@@ -1,0 +1,6 @@
+pytest>=7.4
+pytest-cov>=4.1
+flake8>=6.1
+black>=23.7
+bandit>=1.7
+safety>=2.3
