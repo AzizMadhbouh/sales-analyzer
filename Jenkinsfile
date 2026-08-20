@@ -10,25 +10,25 @@ pipeline {
                 bat 'venv\\Scripts\\activate && pip install flake8 black mypy safety bandit'
             }
         }
-
-        stage('Lint') {
-            steps {
-                bat 'venv\\Scripts\\activate && python -m black --check src/ tests/'
-                bat 'venv\\Scripts\\activate && python -m flake8 src/ tests/'
-                bat 'venv\\Scripts\\activate && python -m mypy src/'
+        parallel{
+            stage('Lint') {
+                steps {
+                    bat 'venv\\Scripts\\activate && python -m black --check src/ tests/'
+                    bat 'venv\\Scripts\\activate && python -m flake8 src/ tests/'
+                    bat 'venv\\Scripts\\activate && python -m mypy src/'
+                }
             }
-        }
 
-        stage('Security') {
-            steps {
-                bat 'venv\\Scripts\\activate && python -m bandit -r src/'
+            stage('Security') {
+                steps {
+                    bat 'venv\\Scripts\\activate && python -m bandit -r src/'
+                }
             }
-        }
 
-        stage('Test') {
-            steps {
-                bat 'venv\\Scripts\\activate && python -m pytest --cov=src --cov-report=term-missing'
+            stage('Test') {
+                steps {
+                    bat 'venv\\Scripts\\activate && python -m pytest --cov=src --cov-report=term-missing'
+                }
             }
-        }
     }
 }
