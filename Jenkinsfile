@@ -30,5 +30,6 @@ pipeline {
                     bat 'venv\\Scripts\\activate && python -m pytest --cov=src --cov-report=term-missing'
                 }
             }
+        }
     }
 }
