@@ -27,7 +27,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                bat 'venv\\Scripts\\activate && python -m pytest --cov-report=term-missing'
+                bat 'venv\\Scripts\\activate && python -m pytest --cov=src --cov-report=term-missing'
             }
         }
     }
