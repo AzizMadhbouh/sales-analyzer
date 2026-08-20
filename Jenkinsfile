@@ -13,6 +13,9 @@ pipeline {
         stage('Code Quality') {
             parallel{
                 stage('Lint') {
+                    agent {
+                        label 'linux'
+                    }
                     steps {
                         bat 'venv\\Scripts\\activate && python -m black --check src/ tests/'
                         bat 'venv\\Scripts\\activate && python -m flake8 src/ tests/'
@@ -21,12 +24,18 @@ pipeline {
                 }
 
                 stage('Security') {
+                    agent {
+                        label 'windows'
+                    }
                     steps {
                         bat 'venv\\Scripts\\activate && python -m bandit -r src/'
                     }
                 }
 
                 stage('Test') {
+                    agent {
+                        docker 'python:3.11'
+                    }
                     steps {
                         bat 'venv\\Scripts\\activate && python -m pytest --cov=src --cov-report=term-missing'
                     }
