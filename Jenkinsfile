@@ -14,7 +14,7 @@ pipeline {
             parallel{
                 stage('Lint') {
                     agent {
-                        label 'linux'
+                        docker 'python:3.11'
                     }
                     steps {
                         bat 'venv\\Scripts\\activate && python -m black --check src/ tests/'
@@ -25,7 +25,7 @@ pipeline {
 
                 stage('Security') {
                     agent {
-                        label 'windows'
+                        docker 'python:3.11'
                     }
                     steps {
                         bat 'venv\\Scripts\\activate && python -m bandit -r src/'
