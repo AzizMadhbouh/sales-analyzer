@@ -9,7 +9,11 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                            additionalBuildArgs '--entrypoint=""'
                         }
+                    }
+                    options {
+                        skipDefaultCheckout()
                     }
                     steps {
                         sh 'pip install flake8 black mypy'
@@ -24,7 +28,11 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                            additionalBuildArgs '--entrypoint=""'
                         }
+                    }
+                    options {
+                        skipDefaultCheckout()
                     }
                     steps {
                         sh 'pip install bandit'
@@ -37,7 +45,11 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                            additionalBuildArgs '--entrypoint=""'
                         }
+                    }
+                    options {
+                        skipDefaultCheckout()
                     }
                     steps {
                         sh 'pip install -r requirements.txt'
