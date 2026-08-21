@@ -5,7 +5,12 @@ pipeline {
         stage('Code Quality') {
             parallel {
                 stage('Lint') {
-                    agent { docker { image 'python:3.12' } }
+                    agent {
+                        docker {
+                            image 'python:3.12'
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                        }
+                    }
                     steps {
                         sh 'pip install flake8 black mypy'
                         sh 'black --check src/ tests/'
@@ -15,7 +20,12 @@ pipeline {
                 }
 
                 stage('Security') {
-                    agent { docker { image 'python:3.12' } }
+                    agent {
+                        docker {
+                            image 'python:3.12'
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                        }
+                    }
                     steps {
                         sh 'pip install bandit'
                         sh 'bandit -r src/'
@@ -23,7 +33,12 @@ pipeline {
                 }
 
                 stage('Test') {
-                    agent { docker { image 'python:3.12' } }
+                    agent {
+                        docker {
+                            image 'python:3.12'
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app'
+                        }
+                    }
                     steps {
                         sh 'pip install -r requirements.txt'
                         sh 'pytest --cov=src --cov-report=term-missing'
