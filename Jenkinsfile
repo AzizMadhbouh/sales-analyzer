@@ -2,14 +2,6 @@ pipeline {
     agent any
 
     stages {
-        stage('Setup') {
-            steps {
-                sh 'python3 -m venv venv'
-                sh '. venv/bin/activate && pip install -r requirements.txt'
-                sh '. venv/bin/activate && pip install flake8 black mypy bandit'
-            }
-        }
-
         stage('Code Quality') {
             parallel {
                 stage('Lint') {
