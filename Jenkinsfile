@@ -52,21 +52,15 @@ pipeline {
                         sh 'pip install -r requirements.txt'
                         sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
                     }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
+                        }
+                    }
                 }
             }
-        }
-    }
-    post{
-        always{
-            archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true 
-            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true  
-            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true  
-        }
-        success{
-            echo 'Build passed'
-        }
-        failure{
-            echo 'Build failed'
         }
     }
 }
