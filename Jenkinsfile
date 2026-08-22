@@ -56,4 +56,10 @@ pipeline {
             }
         }
     }
+    post{
+        always{
+            archiveArtifacts artifacts: 'src/tests/results.xml', fingerprint: true
+            junit 'src/tests/results.xml'
+        }
+    }
 }
