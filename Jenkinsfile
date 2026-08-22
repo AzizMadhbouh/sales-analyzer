@@ -9,6 +9,7 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
+                            reuseNode true
                         }
                     }
                     options {
@@ -27,6 +28,7 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
+                            reuseNode true
                         }
                     }
                     options {
@@ -43,6 +45,7 @@ pipeline {
                         docker {
                             image 'python:3.12'
                             args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
+                            reuseNode true
                         }
                     }
                     options {
