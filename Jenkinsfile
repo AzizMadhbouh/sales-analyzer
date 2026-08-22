@@ -50,7 +50,7 @@ pipeline {
                     }
                     steps {
                         sh 'pip install -r requirements.txt'
-                        sh 'pytest --cov=src --cov-report=term-missing'
+                        sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
                     }
                 }
             }
@@ -58,8 +58,15 @@ pipeline {
     }
     post{
         always{
-            archiveArtifacts artifacts: 'src/tests/results.xml', fingerprint: true
-            junit 'src/tests/results.xml'
+            archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true 
+            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true  
+            junit 'report.xml'  
+        }
+        success{
+            echo 'Build passed'
+        }
+        failure{
+            echo 'Build failed'
         }
     }
 }
