@@ -60,7 +60,7 @@ pipeline {
         always{
             archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true 
             archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true  
-            junit 'report.xml'  
+            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true  
         }
         success{
             echo 'Build passed'
