@@ -51,7 +51,7 @@ pipeline {
                     steps {
                         sh 'pip install -r requirements.txt'
                         sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
-                        sh 'python classify.py test-output.log'
+                        sh 'python /app/classify.py /app/test-output.log'
                     }
                     post {
                         always {
