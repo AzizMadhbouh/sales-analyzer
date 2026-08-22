@@ -60,6 +60,20 @@ pipeline {
                         }
                     }
                 }
+                stage('Analyze Logs') {
+                    agent {
+                        docker {
+                            image 'python:3.12'
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
+                        }
+                    }
+                    options {
+                        skipDefaultCheckout()
+                    }
+                    steps {
+                        sh 'python classify.py test-output.log'
+                    }
+                }
             }
         }
     }
