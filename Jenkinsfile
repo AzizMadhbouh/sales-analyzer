@@ -51,6 +51,7 @@ pipeline {
                     steps {
                         sh 'pip install -r requirements.txt'
                         sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
+                        sh 'python classify.py test-output.log'
                     }
                     post {
                         always {
@@ -58,20 +59,6 @@ pipeline {
                             archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
                             archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
                         }
-                    }
-                }
-                stage('Analyze Logs') {
-                    agent {
-                        docker {
-                            image 'python:3.12'
-                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
-                        }
-                    }
-                    options {
-                        skipDefaultCheckout()
-                    }
-                    steps {
-                        sh 'python classify.py test-output.log'
                     }
                 }
             }
