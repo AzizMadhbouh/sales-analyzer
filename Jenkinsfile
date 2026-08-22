@@ -4,7 +4,10 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                sh 'apt-get update && apt-get install -y python3 python3-pip'
+                sh 'apt-get update && apt-get install -y python3 python3-pip python3-venv'
+                sh 'python3 -m venv venv'
+                sh '. venv/bin/activate && pip install -r requirements.txt'
+                sh '. venv/bin/activate && pip install flake8 black mypy bandit'
             }
         }
 
@@ -12,25 +15,22 @@ pipeline {
             parallel {
                 stage('Lint') {
                     steps {
-                        sh 'pip install flake8 black mypy'
-                        sh 'black --check src/ tests/'
-                        sh 'flake8 src/ tests/'
-                        sh 'mypy src/'
+                        sh '. venv/bin/activate && black --check src/ tests/'
+                        sh '. venv/bin/activate && flake8 src/ tests/'
+                        sh '. venv/bin/activate && mypy src/'
                     }
                 }
 
                 stage('Security') {
                     steps {
-                        sh 'pip install bandit'
-                        sh 'bandit -r src/'
+                        sh '. venv/bin/activate && bandit -r src/'
                     }
                 }
 
                 stage('Test') {
                     steps {
-                        sh 'pip install -r requirements.txt'
-                        sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
-                        sh 'python3 classify.py test-output.log'
+                        sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
+                        sh '. venv/bin/activate && python classify.py test-output.log'
                     }
                     post {
                         always {
