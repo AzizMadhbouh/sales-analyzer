@@ -8,8 +8,7 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.12'
-                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
-                            reuseNode true
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app --entrypoint=""'
                         }
                     }
                     options {
@@ -17,9 +16,9 @@ pipeline {
                     }
                     steps {
                         sh 'pip install flake8 black mypy'
-                        sh 'black --check src/ tests/'
-                        sh 'flake8 src/ tests/'
-                        sh 'mypy src/'
+                        sh 'black --check /app/src/ /app/tests/'
+                        sh 'flake8 /app/src/ /app/tests/'
+                        sh 'mypy /app/src/'
                     }
                 }
 
@@ -27,8 +26,7 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.12'
-                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
-                            reuseNode true
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app --entrypoint=""'
                         }
                     }
                     options {
@@ -36,7 +34,7 @@ pipeline {
                     }
                     steps {
                         sh 'pip install bandit'
-                        sh 'bandit -r src/'
+                        sh 'bandit -r /app/src/'
                     }
                 }
 
@@ -44,23 +42,22 @@ pipeline {
                     agent {
                         docker {
                             image 'python:3.12'
-                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app -w /app --entrypoint=""'
-                            reuseNode true
+                            args '-v /var/jenkins_home/workspace/sales-analyzer:/app --entrypoint=""'
                         }
                     }
                     options {
                         skipDefaultCheckout()
                     }
                     steps {
-                        sh 'pip install -r requirements.txt'
-                        sh 'pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
-                        sh 'python /app/classify.py /app/test-output.log'
+                        sh 'pip install -r /app/requirements.txt'
+                        sh 'cd /app && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
+                        sh 'cd /app && python classify.py test-output.log'
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true
-                            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
-                            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
+                            archiveArtifacts artifacts: '/app/test-output.log', allowEmptyArchive: true
+                            archiveArtifacts artifacts: '/app/htmlcov/**', allowEmptyArchive: true
+                            archiveArtifacts artifacts: '/app/report.xml', allowEmptyArchive: true
                         }
                     }
                 }
