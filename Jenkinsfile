@@ -11,23 +11,39 @@ pipeline {
             }
         }
 
-        stage('Code Quality') {
+        stage('Lint') {
             steps {
-                sh '. venv/bin/activate && black --check src/ tests/ 2>&1 | tee -a build-output.log'
-                sh '. venv/bin/activate && flake8 src/ tests/ 2>&1 | tee -a build-output.log'
-                sh '. venv/bin/activate && mypy src/ 2>&1 | tee -a build-output.log'
-                sh '. venv/bin/activate && bandit -r src/ 2>&1 | tee -a build-output.log'
-                sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && black --check src/ tests/ > build-output.log 2>&1'
+                sh '. venv/bin/activate && flake8 src/ tests/ >> build-output.log 2>&1'
+                sh '. venv/bin/activate && mypy src/ >> build-output.log 2>&1'
+            }
+        }
+
+        stage('Security') {
+            steps {
+                sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml >> build-output.log 2>&1'
+            }
+        }
+
+        stage('Analyze') {
+            steps {
                 sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt'
             }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'build-output.log', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'analysis-report.txt', allowEmptyArchive: true
-                }
-            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'build-output.log', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'analysis-report.txt', allowEmptyArchive: true
         }
     }
 }
