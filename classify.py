@@ -76,13 +76,13 @@ def is_noise(line):
         return True
     if stripped.startswith('Total:'):
         return True
-    if stripped.startswith('Error Details:'):
+    if 'Summary:' in stripped:
         return True
-    if stripped.startswith('Warning Details:'):
+    if 'Details:' in stripped:
         return True
-    if stripped.startswith('[') and ']' in stripped[:20]:
+    if stripped.startswith('Build is clean'):
         return True
-    if re.match(r'  \[', stripped):
+    if re.match(r'^\s*\[', stripped):
         return True
     if stripped.startswith('Passed in branch') or stripped.startswith('Failed in branch'):
         return True
@@ -92,7 +92,9 @@ def is_noise(line):
         return True
     if stripped.startswith('WARNING: pytest cache'):
         return True
-    if stripped.startswith('WARNING: Fictional'):
+    if stripped.startswith('ERROR: script returned'):
+        return True
+    if re.match(r'^\s+\d+ (error|warning)', stripped):
         return True
     return False
 
@@ -121,13 +123,21 @@ def classify_warning(line):
     return category, sev
 
 
+def get_dedup_key(line):
+    key = line.strip()
+    key = re.sub(r'\s*\[\s*\d+%\]', '', key)
+    key = re.sub(r'\s*-\s*TypeError:.*', '', key)
+    key = re.sub(r'\s*-\s*AssertionError:.*', '', key)
+    return key
+
+
 errors = []
 seen_errors = set()
 for line in lines:
     if is_noise(line):
         continue
     if 'error' in line.lower() or 'failed' in line.lower() or re.search(r'[EFW]\d{3}', line):
-        key = line.strip()
+        key = get_dedup_key(line)
         if key in seen_errors:
             continue
         seen_errors.add(key)
