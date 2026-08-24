@@ -12,34 +12,20 @@ pipeline {
         }
 
         stage('Code Quality') {
-            parallel {
-                stage('Lint') {
-                    steps {
-                        sh '. venv/bin/activate && black --check src/ tests/'
-                        sh '. venv/bin/activate && flake8 src/ tests/'
-                        sh '. venv/bin/activate && mypy src/'
-                    }
-                }
-
-                stage('Security') {
-                    steps {
-                        sh '. venv/bin/activate && bandit -r src/'
-                    }
-                }
-
-                stage('Test') {
-                    steps {
-                        sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
-                        sh '. venv/bin/activate && python predict.py test-output.log > analysis-report.txt'
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true
-                            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
-                            archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
-                            archiveArtifacts artifacts: 'analysis-report.txt', allowEmptyArchive: true
-                        }
-                    }
+            steps {
+                sh '. venv/bin/activate && black --check src/ tests/ 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && flake8 src/ tests/ 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && mypy src/ 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && bandit -r src/ 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee -a build-output.log'
+                sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'build-output.log', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'analysis-report.txt', allowEmptyArchive: true
                 }
             }
         }
