@@ -67,24 +67,43 @@ with open(sys.argv[1], encoding='utf-8-sig') as f:
     lines = f.readlines()
 
 errors = []
+warnings = []
 seen = set()
 for line in lines:
     stripped = line.strip()
     if is_noise(stripped):
         continue
-    if 'error' in stripped.lower() or 'failed' in stripped.lower() or 'warning' in stripped.lower() or re.search(r'[EFW]\d{3}', stripped):
-        key = get_dedup_key(stripped)
-        if key in seen:
-            continue
-        seen.add(key)
+    key = get_dedup_key(stripped)
+    if key in seen:
+        continue
+    seen.add(key)
+    is_error = 'error' in stripped.lower() or 'failed' in stripped.lower() or re.search(r'[EFW]\d{3}', stripped)
+    is_warning = 'warning' in stripped.lower() or 'warn' in stripped.lower()
+    if is_error or is_warning:
         category, severity = predict(stripped)
-        errors.append({'category': category, 'severity': severity, 'line': stripped})
+        entry = {'category': category, 'severity': severity, 'line': stripped}
+        if is_warning and not is_error:
+            warnings.append(entry)
+        else:
+            errors.append(entry)
 
-counts = Counter(e['category'] for e in errors)
-print(f"Total: {len(errors)} issues\n")
-for cat, count in counts.items():
+counts_errors = Counter(e['category'] for e in errors)
+counts_warnings = Counter(w['category'] for w in warnings)
+
+print(f"Errors: {len(errors)}")
+for cat, count in counts_errors.items():
     print(f"  {cat}: {count}")
 
-print(f"\nDetails:")
-for e in errors:
-    print(f"  [{e['severity']}] [{e['category']}] {e['line']}")
+print(f"\nWarnings: {len(warnings)}")
+for cat, count in counts_warnings.items():
+    print(f"  {cat}: {count}")
+
+if errors:
+    print(f"\nError Details:")
+    for e in errors:
+        print(f"  [{e['severity']}] [{e['category']}] {e['line']}")
+
+if warnings:
+    print(f"\nWarning Details:")
+    for w in warnings:
+        print(f"  [{w['severity']}] [{w['category']}] {w['line']}")
