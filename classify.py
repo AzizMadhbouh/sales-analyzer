@@ -105,6 +105,12 @@ def classify_error(line):
         if any(kw.lower() in line.lower() for kw in keywords):
             category = cat
             break
+    if category == 'Tests' and 'TypeError' in line:
+        category = 'Types'
+    elif category == 'Tests' and 'ModuleNotFoundError' in line:
+        category = 'Dependencies'
+    elif category == 'Tests' and 'ImportError' in line:
+        category = 'Dependencies'
     sev = severity.get(category, 'Low')
     return category, sev
 
