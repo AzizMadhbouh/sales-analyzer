@@ -22,6 +22,7 @@ pipeline {
         stage('Security') {
             steps {
                 sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1'
+                sh '. venv/bin/activate && pylint src/ --output-format=text >> build-output.log 2>&1'
             }
         }
 

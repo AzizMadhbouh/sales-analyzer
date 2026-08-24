@@ -5,3 +5,4 @@ black>=23.7
 mypy>=1.5
 bandit>=1.7
 safety>=2.3
+pylint>=3.0
