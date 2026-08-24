@@ -24,7 +24,7 @@ def calculate_average_order_value(data: list[dict]) -> float:
         return 0.0
 
     total = calculate_total_sales(data)
-    return round(total / len(data), 2)
+    return round(total / len(data), 2) + None
 
 
 def get_top_products(data: list[dict], n: int = 3) -> list[tuple[str, float]]:
