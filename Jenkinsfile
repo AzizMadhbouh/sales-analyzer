@@ -7,7 +7,7 @@ pipeline {
                 sh 'apt-get update && apt-get install -y python3 python3-pip python3-venv'
                 sh 'python3 -m venv venv'
                 sh '. venv/bin/activate && pip install -r requirements.txt'
-                sh '. venv/bin/activate && pip install flake8 black mypy bandit'
+                sh '. venv/bin/activate && pip install flake8 black mypy bandit scikit-learn'
             }
         }
 
@@ -30,13 +30,14 @@ pipeline {
                 stage('Test') {
                     steps {
                         sh '. venv/bin/activate && pytest --cov=src --cov-report=html --junitxml=report.xml 2>&1 | tee test-output.log'
-                        sh '. venv/bin/activate && python classify.py test-output.log'
+                        sh '. venv/bin/activate && python predict.py test-output.log > analysis-report.txt'
                     }
                     post {
                         always {
                             archiveArtifacts artifacts: 'test-output.log', allowEmptyArchive: true
                             archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
                             archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'analysis-report.txt', allowEmptyArchive: true
                         }
                     }
                 }
