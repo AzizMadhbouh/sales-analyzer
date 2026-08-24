@@ -77,8 +77,8 @@ for line in lines:
     if key in seen:
         continue
     seen.add(key)
-    is_error = 'error' in stripped.lower() or 'failed' in stripped.lower() or re.search(r'[EC]\d{3}', stripped)
-    is_warning = 'warning' in stripped.lower() or 'warn' in stripped.lower() or re.search(r'W\d{4}', stripped)
+    is_error = 'error' in stripped.lower() or 'failed' in stripped.lower() or re.search(r'[FE]\d{3}', stripped)
+    is_warning = 'warning' in stripped.lower() or 'warn' in stripped.lower() or re.search(r'[CW]\d{4}', stripped)
     if is_error or is_warning:
         category, severity = predict(stripped)
         entry = {'category': category, 'severity': severity, 'line': stripped}
