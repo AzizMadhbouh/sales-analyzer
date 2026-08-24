@@ -13,11 +13,11 @@ pipeline {
 
         stage('Analyze') {
             steps {
-                sh '. venv/bin/activate && black --check src/ tests/ > build-output.log 2>&1 || true'
-                sh '. venv/bin/activate && flake8 src/ tests/ >> build-output.log 2>&1 || true'
-                sh '. venv/bin/activate && mypy src/ >> build-output.log 2>&1 || true'
-                sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1 || true'
-                sh '. venv/bin/activate && pylint src/ >> build-output.log 2>&1 || true'
+                sh '. venv/bin/activate && black --check src/ tests/ > build-output.log 2>&1 '
+                sh '. venv/bin/activate && flake8 src/ tests/ >> build-output.log 2>&1 '
+                sh '. venv/bin/activate && mypy src/ >> build-output.log 2>&1 '
+                sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1 '
+                sh '. venv/bin/activate && pylint src/ >> build-output.log 2>&1 '
             }
         }
 
