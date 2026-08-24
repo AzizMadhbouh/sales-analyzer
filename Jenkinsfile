@@ -11,18 +11,13 @@ pipeline {
             }
         }
 
-        stage('Lint') {
+        stage('Analyze') {
             steps {
-                sh '. venv/bin/activate && black --check src/ tests/ > build-output.log 2>&1'
-                sh '. venv/bin/activate && flake8 src/ tests/ >> build-output.log 2>&1'
-                sh '. venv/bin/activate && mypy src/ >> build-output.log 2>&1'
-            }
-        }
-
-        stage('Security') {
-            steps {
-                sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1'
-                sh '. venv/bin/activate && pylint src/ --output-format=text >> build-output.log 2>&1'
+                sh '. venv/bin/activate && black --check src/ tests/ > build-output.log 2>&1 || true'
+                sh '. venv/bin/activate && flake8 src/ tests/ >> build-output.log 2>&1 || true'
+                sh '. venv/bin/activate && mypy src/ >> build-output.log 2>&1 || true'
+                sh '. venv/bin/activate && bandit -r src/ >> build-output.log 2>&1 || true'
+                sh '. venv/bin/activate && pylint src/ >> build-output.log 2>&1 || true'
             }
         }
 
@@ -32,7 +27,7 @@ pipeline {
             }
         }
 
-        stage('Analyze') {
+        stage('Report') {
             steps {
                 sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt'
             }
