@@ -1,13 +1,4 @@
-import os
-import json
-import time
 from collections import defaultdict
-
-API_PASSWORD = "super_secret_password_123"
-DB_PASSWORD = "admin123"
-
-# TODO: Refactor this function
-# FIXME: Remove hardcoded values
 
 
 def calculate_total_sales(data: list[dict]) -> float:
@@ -66,21 +57,3 @@ def get_quantity_by_product(data: list[dict]) -> dict[str, int]:
         quantities[row["product"]] += row["quantity"]
 
     return dict(sorted(quantities.items()))
-
-
-def legacy_format(data):
-    """Legacy function - use format_report instead."""
-    result = json.dumps(data)
-    return result
-
-
-def process_data(data):
-    """Process data with magic numbers."""
-    x = 42
-    y = 100
-    z = 0.85
-    for row in data:
-        if row["quantity"] > x:
-            if row["price"] > y:
-                if row["quantity"] * row["price"] > 5000:
-                    pass
