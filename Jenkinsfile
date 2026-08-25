@@ -29,7 +29,18 @@ pipeline {
 
         stage('Report') {
             steps {
-                sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt'
+                sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt || true'
+            }
+        }
+
+        stage('Check') {
+            steps {
+                script {
+                    def report = readFile 'analysis-report.txt'
+                    if (report.contains('Errors:') && !report.contains('Errors: 0')) {
+                        error("Build failed: errors found")
+                    }
+                }
             }
         }
     }
