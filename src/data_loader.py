@@ -1,3 +1,4 @@
+"""Data loading and validation for sales data."""
 import csv
 from pathlib import Path
 
@@ -9,7 +10,7 @@ def load_csv(file_path: str) -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    if not path.suffix == ".csv":
+    if path.suffix != ".csv":
         raise ValueError(f"Expected CSV file, got: {path.suffix}")
 
     with open(path, "r", encoding="utf-8") as f:

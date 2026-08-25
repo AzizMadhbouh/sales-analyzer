@@ -1,3 +1,4 @@
+"""Sales data analysis functions."""
 from collections import defaultdict
 
 

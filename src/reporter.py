@@ -1,3 +1,5 @@
+"""Report generation for sales data."""
+import csv
 from .analyzer import (
     calculate_average_order_value,
     calculate_total_sales,
@@ -51,8 +53,6 @@ def generate_text_report(data: list[dict]) -> str:
 
 def generate_csv_report(data: list[dict], output_path: str) -> None:
     """Export analyzed data to a CSV file."""
-    import csv
-
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f, fieldnames=["date", "product", "quantity", "price", "revenue"]
