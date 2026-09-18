@@ -1,0 +1,48 @@
+{
+  "root_cause_baselines": {
+    "api_gateway_deployment_error": "High",
+    "container_registry_server_error": "High",
+    "dependency_installation_failure": "High",
+    "helm_resource_error": "High",
+    "misconfigured_env_variable": "High",
+    "external_file_invalid_format": "Medium",
+    "flaky_ui_test": "Medium",
+    "git_transient_error": "Medium",
+    "host_resolution_failure": "Medium",
+    "job_execution_timeout": "Medium",
+    "remote_call_timeout": "Medium",
+    "runner_image_pull_failure": "Medium",
+    "runner_pod_waiting_timeout": "Medium"
+  },
+  "tool_codes": {
+    "pylint": { "F": "Critical", "E": "High", "W": "Medium", "C": "Low", "R": "Medium" },
+    "flake8": { "E": "Medium", "W": "Low", "F": "Medium", "C": "Low" },
+    "bandit": "use_message_severity"
+  },
+  "signals": {
+    "downgrade": {
+      "flaky": true,
+      "flakiness": true,
+      "flaked": true,
+      "retry": true,
+      "retries": true,
+      "retrying": true,
+      "timeout": true,
+      "timed out": true,
+      "transient": true,
+      "temporary": true
+    },
+    "upgrade": {
+      "fatal": true,
+      "permission denied": true,
+      "access denied": true,
+      "not authorized": true,
+      "forbidden": true,
+      "tls": true,
+      "certificate": true,
+      "expired": true,
+      "cannot start container": true,
+      "disk full": true
+    }
+  }
+}

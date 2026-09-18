@@ -1,19 +1,146 @@
 import os
 import json
 import re
+import psycopg2
 from datetime import datetime
 from pathlib import Path
 from collections import Counter, defaultdict
-import psycopg2
-
-def get_db():
-    return psycopg2.connect(
-        host="localhost", database="buildhistory",
-        user="builduser", password="buildpass"
-    )
 
 
 DATA_DIR = Path("build_history")
+
+
+def _load_dotenv(path=".env"):
+    p = Path(path)
+    if not p.exists():
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k = k.strip()
+        v = v.strip().strip('"').strip("'")
+        if k and k not in os.environ:
+            os.environ[k] = v
+
+
+_load_dotenv()
+
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = int(os.environ.get("DB_PORT", "5432"))
+DB_NAME = os.environ.get("DB_NAME", "buildhistory")
+DB_USER = os.environ.get("DB_USER", "builduser")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+
+
+def get_db_conn():
+    return psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+    )
+
+
+def ensure_schema():
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS builds (
+            id SERIAL PRIMARY KEY,
+            build_id INTEGER UNIQUE,
+            timestamp TIMESTAMP,
+            error_count INTEGER,
+            warning_count INTEGER,
+            trend TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS build_issues (
+            id SERIAL PRIMARY KEY,
+            build_id INTEGER,
+            timestamp TIMESTAMP,
+            severity TEXT,
+            category TEXT,
+            line TEXT,
+            is_error BOOLEAN
+        )
+    """)
+    cur.execute("ALTER TABLE build_issues ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP")
+    cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS result TEXT")
+    conn.commit()
+    conn.close()
+
+
+def save_build_to_db(data):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO builds (build_id, timestamp, error_count, warning_count, trend, result) "
+        "VALUES (%s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (build_id) DO UPDATE SET "
+        "timestamp = EXCLUDED.timestamp, error_count = EXCLUDED.error_count, "
+        "warning_count = EXCLUDED.warning_count, result = EXCLUDED.result",
+        (
+            data["build_id"],
+            datetime.fromisoformat(data["timestamp"]),
+            data["error_count"],
+            data["warning_count"],
+            data.get("trend", ""),
+            data.get("result"),
+        ),
+    )
+    row_timestamp = datetime.fromisoformat(data["timestamp"])
+    for entry in data["errors"]:
+        cur.execute(
+            "INSERT INTO build_issues (build_id, timestamp, severity, category, line, is_error) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (data["build_id"], row_timestamp, entry["severity"], entry["category"], entry["line"], True),
+        )
+    for entry in data["warnings"]:
+        cur.execute(
+            "INSERT INTO build_issues (build_id, timestamp, severity, category, line, is_error) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (data["build_id"], row_timestamp, entry["severity"], entry["category"], entry["line"], False),
+        )
+    conn.commit()
+    conn.close()
+
+
+def update_trends():
+    """Recompute trend for every build based on the full history."""
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT build_id, error_count FROM builds ORDER BY timestamp")
+    rows = cur.fetchall()
+    if len(rows) < 2:
+        conn.close()
+        return
+    error_trend = [r[1] for r in rows]
+    trend = "stable"
+    recent = error_trend[-1]
+    earlier = error_trend[0]
+    if recent > earlier * 1.5:
+        trend = "increasing"
+    elif recent < earlier * 0.5:
+        trend = "decreasing"
+    cur.execute("UPDATE builds SET trend = %s", (trend,))
+    conn.commit()
+    conn.close()
+
+
+def seed_from_history():
+    if not DATA_DIR.exists():
+        print("No build_history directory found.")
+        return
+    ensure_schema()
+    for path in sorted(DATA_DIR.glob("build_*.json")):
+        with open(path) as f:
+            data = json.load(f)
+        save_build_to_db(data)
+        print(f"Seeded build {data['build_id']}: {data['error_count']} errors, {data['warning_count']} warnings")
 
 
 def parse_report(text):
@@ -57,23 +184,31 @@ def parse_report(text):
         "warnings": warnings
     }
 
-def save_build_to_db(build_id, data):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO builds (build_id, timestamp, error_count, warning_count) "
-        "VALUES (%s, %s, %s, %s) ON CONFLICT (build_id) DO NOTHING",
-        (data["build_id"], data["timestamp"], data["error_count"], data["warning_count"])
-    )
-    for entry in data["errors"] + data["warnings"]:
-        cur.execute(
-            "INSERT INTO build_issues (build_id, severity, category, line, is_error) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (build_id, entry["severity"], entry["category"], entry["line"],
-             entry["category"] in BUILD_BREAKING)
-        )
-    conn.commit()
-    conn.close()
+
+def save_build(build_id, report_path, result=None):
+    """Read a report file, save it to build_history/ and PostgreSQL."""
+    DATA_DIR.mkdir(exist_ok=True)
+
+    with open(report_path, encoding="utf-8-sig") as f:
+        text = f.read()
+
+    data = parse_report(text)
+    data["build_id"] = build_id
+    data["timestamp"] = datetime.now().isoformat()
+    data["report_path"] = str(report_path)
+    data["result"] = result
+
+    out_path = DATA_DIR / f"build_{build_id}.json"
+    with open(out_path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    ensure_schema()
+    save_build_to_db(data)
+    update_trends()
+    print(f"DB: saved build {build_id} | result={result or '?'}")
+
+    print(f"Saved build {build_id}: {data['error_count']} errors, {data['warning_count']} warnings")
+    return data
 
 
 def load_all_builds():
@@ -101,8 +236,8 @@ def detect_patterns(builds):
         return {}, {}, {}
 
 
-    issue_history = defaultdict(list) 
-    file_issues = defaultdict(int)     
+    issue_history = defaultdict(list)
+    file_issues = defaultdict(int)
     error_trend = []
     warning_trend = []
 
@@ -193,10 +328,10 @@ def analyze_all():
             issue_stats[line]["warnings"] += 1
             issue_stats[line]["builds"].add(build["build_id"])
 
-  
+
     scored = []
     for line, stats in issue_stats.items():
-  
+
         for build in reversed(builds):
             issue = next(
                 (e for e in build["errors"] + build["warnings"] if e["line"] == line),
@@ -276,6 +411,14 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--save":
         build_id = int(sys.argv[2])
         report_path = sys.argv[3]
-        save_build_to_db(build_id, report_path)
+        result = None
+        rest = sys.argv[4:]
+        while rest:
+            flag, rest = rest[0], rest[1:]
+            if flag == "--result" and rest:
+                result, rest = rest[0], rest[1:]
+        save_build(build_id, report_path, result=result)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--seed":
+        seed_from_history()
     else:
         analyze_all()

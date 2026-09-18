@@ -1,109 +1,52 @@
-import pickle
+import json
+import os
 import re
 import sys
-from collections import Counter
 
-# Load models
-with open('category_model.pkl', 'rb') as f:
-    vectorizer, category_model = pickle.load(f)
+import torch
 
-with open('severity_model.pkl', 'rb') as f:
-    _, severity_model = pickle.load(f)
+from ml.rootcause_model import DEFAULT_REPO, extract_evidence_lines, load, predict_log
+from ml.severity_llm import classify_severity
 
+REPO_ID = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_REPO
+REPORT_PATH = os.environ.get("ROOTCAUSE_REPORT", "rootcause_report.json")
 
-def predict(line):
-    X = vectorizer.transform([line])
-    category = category_model.predict(X)[0]
-    severity = severity_model.predict(X)[0]
-    return category, severity
+print(f"Loading root-cause model from HuggingFace Hub: {REPO_ID} ...")
+tokenizer, model, device = load(REPO_ID)
 
+with open(sys.argv[1], encoding="utf-8-sig", errors="replace") as f:
+    log_text = f.read()
 
-def is_noise(line):
-    stripped = line.strip()
-    if not stripped:
-        return True
-    if stripped.startswith('[Pipeline]'):
-        return True
-    if stripped.startswith('Running on'):
-        return True
-    if stripped.startswith('Obtained'):
-        return True
-    if stripped.startswith('Started by'):
-        return True
-    if stripped.startswith('Finished:'):
-        return True
-    if re.match(r'^\s*\[', stripped):
-        return True
-    if stripped.startswith('Passed in branch') or stripped.startswith('Failed in branch'):
-        return True
-    if '=== ' in stripped and ' ===' in stripped:
-        return True
-    if re.match(r'\d+ passed', stripped):
-        return True
-    if stripped.startswith('WARNING: pytest cache'):
-        return True
-    if stripped.startswith('ERROR: script returned'):
-        return True
-    if 'Summary:' in stripped or 'Details:' in stripped:
-        return True
-    if stripped.startswith('Build is clean'):
-        return True
-    if re.match(r'^\s*\d+ (error|warning)', stripped):
-        return True
-    if re.match(r'^\[', stripped):
-        return True
-    if re.match(r'^Total:', stripped):
-        return True
-    if stripped.startswith('Build is clean'):
-        return True
-    return False
+root_cause, confidence, top3 = predict_log(tokenizer, model, device, log_text)
 
+evidence_lines, evidence_block = extract_evidence_lines(log_text)
+sev, sev_source, sev_note = classify_severity(root_cause, evidence_block)
 
-def get_dedup_key(line):
-    return line.strip()
+report = {
+    "job": os.path.basename(sys.argv[1]),
+    "root_cause": root_cause,
+    "confidence": round(confidence, 4),
+    "top_causes": [{"cause": c, "prob": round(p, 4)} for c, p in top3],
+    "severity": sev,
+    "severity_source": sev_source,
+    "severity_reason": sev_note,
+    "evidence_lines": evidence_lines,
+}
 
+print("=" * 64)
+print(f"ROOT CAUSE : {root_cause}")
+print(f"CONFIDENCE : {confidence:.3f}")
+for c, p in top3[1:]:
+    print(f"  alt      : {c} ({p:.3f})")
+print(f"SEVERITY   : {sev}   [source: {sev_source}]")
+if sev_note:
+    print(f"  reason   : {sev_note}")
+print(f"EVIDENCE   : {len(evidence_lines)} distinct error/failure lines")
+print("-" * 64)
+for i, line in enumerate(evidence_lines[:15], 1):
+    print(f"  {i:>2}. {line[:180]}")
+print("=" * 64)
 
-with open(sys.argv[1], encoding='utf-8-sig') as f:
-    lines = f.readlines()
-
-errors = []
-warnings = []
-seen = set()
-for line in lines:
-    stripped = line.strip()
-    if is_noise(stripped):
-        continue
-    key = get_dedup_key(stripped)
-    if key in seen:
-        continue
-    seen.add(key)
-    is_error = 'error' in stripped.lower() or 'failed' in stripped.lower() or re.search(r'E\d{3}', stripped)
-    is_warning = 'warning' in stripped.lower() or 'warn' in stripped.lower() or re.search(r'[FCW]\d{3,4}', stripped)
-    if is_error or is_warning:
-        category, severity = predict(stripped)
-        entry = {'category': category, 'severity': severity, 'line': stripped}
-        if is_warning and not is_error:
-            warnings.append(entry)
-        else:
-            errors.append(entry)
-
-counts_errors = Counter(e['category'] for e in errors)
-counts_warnings = Counter(w['category'] for w in warnings)
-
-print(f"Errors: {len(errors)}")
-for cat, count in counts_errors.items():
-    print(f"  {cat}: {count}")
-
-print(f"\nWarnings: {len(warnings)}")
-for cat, count in counts_warnings.items():
-    print(f"  {cat}: {count}")
-
-if errors:
-    print(f"\nError Details:")
-    for e in errors:
-        print(f"  [{e['severity']}] [{e['category']}] {e['line']}")
-
-if warnings:
-    print(f"\nWarning Details:")
-    for w in warnings:
-        print(f"  [{w['severity']}] [{w['category']}] {w['line']}")
+print(f"\n[report written] {REPORT_PATH}")
+with open(REPORT_PATH, "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2, ensure_ascii=False)

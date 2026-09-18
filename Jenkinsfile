@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    environment {
+        DB_HOST = 'postgres-buildhistory'
+        DB_PORT = '5432'
+        DB_NAME = 'buildhistory'
+        DB_USER = 'builduser'
+        DB_PASSWORD = credentials('db-buildpass')
+    }
+
     stages {
         stage('Setup') {
             steps {
@@ -27,18 +35,12 @@ pipeline {
             }
         }
 
-        stage('Report') {
-            steps {
-                sh '. venv/bin/activate && python predict.py build-output.log > analysis-report.txt || true'
-            }
-        }
-
         stage('Check') {
             steps {
                 script {
-                    def report = readFile 'analysis-report.txt'
-                    if (report.contains('Errors:') && !report.contains('Errors: 0')) {
-                        error("Build failed: errors found")
+                    def log = readFile 'build-output.log'
+                    if (log =~ /Traceback \(most recent call last\)|\] FAILED|Fatal error|bandit - (?:results|issues) found/) {
+                        error("Build failed: errors found in static analysis / tests")
                     }
                 }
             }
@@ -47,6 +49,10 @@ pipeline {
 
     post {
         always {
+            script {
+                def buildResult = currentBuild.result ?: 'SUCCESS'
+                sh ". venv/bin/activate && python analyze_history.py --save \$BUILD_NUMBER analysis-report.txt --result ${buildResult} || true"
+            }
             archiveArtifacts artifacts: 'build-output.log', allowEmptyArchive: true
             archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
             archiveArtifacts artifacts: 'report.xml', allowEmptyArchive: true
