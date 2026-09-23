@@ -1,0 +1,11 @@
+Errors: 3
+Warnings: 2
+
+Error Details:
+[High] [Types] TypeError in src/analyzer.py line 42: unsupported operand
+[Critical] [Dependencies] ModuleNotFoundError: No module named 'requests'
+[High] [Docker] DockerBuildError failed to build image in Jenkinsfile
+
+Warning Details:
+[Low] [Style] E501 line too long in src/reporter.py line 120
+[Medium] [Tests] test_history.py::test_recurring flaky rerun

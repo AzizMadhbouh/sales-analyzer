@@ -1,0 +1,16 @@
+Errors: 6
+Warnings: 4
+
+Error Details:
+[High] [Types] TypeError in src/analyzer.py line 42: unsupported operand
+[Critical] [Dependencies] ModuleNotFoundError: No module named 'requests'
+[High] [Network] ConnectionError in src/data_loader.py line 88
+[Medium] [Tests] AssertionError in tests/test_analyzer.py line 15
+[High] [Git] GitFetchError failed to clone repository in Jenkinsfile
+[High] [Types] AttributeError in src/reporter.py line 60
+
+Warning Details:
+[Low] [Style] W503 line break occurred in src/analyzer.py line 100
+[Medium] [Tests] test_predict.py::test_slow slowness threshold exceeded
+[Low] [Style] E501 line too long in src/reporter.py line 120
+[High] [Security] possible SQL injection in src/data_loader.py line 200
