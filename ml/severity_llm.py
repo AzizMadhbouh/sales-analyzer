@@ -1,15 +1,27 @@
 import json
 import os
+import random
 import re
+import time
 import urllib.error
 import urllib.request
 
 SEVERITY_LEVELS = ("Low", "Medium", "High", "Critical")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
-PROVIDER = os.environ.get("SEVERITY_LLM_PROVIDER", "ollama")  # ollama | gemini | none | auto
+PROVIDER = os.environ.get("SEVERITY_LLM_PROVIDER", "gemini")  # gemini | none
+
+MAX_RETRIES = 6
+RETRYABLE_CODES = {429, 500, 502, 503, 504}
+
+# Free tier = 20 req/day per model; rotate so one exhausted quota doesn't block.
+_MODEL_FALLBACKS = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemini-3-flash-preview",
+]
 
 _POLICY_PATH = os.path.join(os.path.dirname(__file__), "severity_policy.json")
 _POLICY = json.load(open(_POLICY_PATH, encoding="utf-8"))
@@ -77,9 +89,11 @@ def _user_text(root_cause, evidence):
 
 
 def _gemini_body(root_cause, evidence, force_json):
-    cfg = {"temperature": 0, "maxOutputTokens": 200}
+    cfg = {"temperature": 0, "maxOutputTokens": 1000}
     if force_json:
         cfg["responseMimeType"] = "application/json"
+    if os.environ.get("GEMINI_THINKING", "0") != "1":
+        cfg["thinkingConfig"] = {"thinkingBudget": 0}  # gemini 3.x is a thinking model by default
     return {
         "system_instruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
         "contents": [{"parts": [{"text": _user_text(root_cause, evidence)}]}],
@@ -87,113 +101,129 @@ def _gemini_body(root_cause, evidence, force_json):
     }
 
 
-def _call_gemini(root_cause, evidence, api_key, model, timeout):
-    url = f"{GEMINI_URL}/{model}:generateContent?key={api_key}"
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(_gemini_body(root_cause, evidence, True)).encode("utf-8"),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        if e.code != 400:  # 400: model may not support JSON mode -> retry without it
-            raise
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(_gemini_body(root_cause, evidence, False)).encode("utf-8"),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    candidates = data.get("candidates", []) or []
-    if not candidates:
-        raise RuntimeError("no candidates: " + json.dumps(data)[:200])
-    return "".join(p.get("text", "") for p in candidates[0]["content"]["parts"])
-
-
-def _parse_severity(text):
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        return None, None
-    try:
-        obj = json.loads(text[start:end + 1])
-    except json.JSONDecodeError:
-        m = re.search(r'"(severity)"\s*:\s*"(\w+)"', text)
-        if not m:
-            return None, None
-        return m.group(2), None
-    sev = obj.get("severity")
-    return (sev, obj.get("reason")) if sev in SEVERITY_LEVELS else (None, obj.get("reason"))
-
-
-def _ollama_up(host, timeout=1.5):
-    try:
-        with urllib.request.urlopen(host + "/api/tags", timeout=timeout) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
-
-
-def _call_ollama(root_cause, evidence, model, timeout):
-    body = {
-        "model": model,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0},
-        "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": _user_text(root_cause, evidence)},
-        ],
-    }
+def _gemini_once(url, api_key, root_cause, evidence, timeout, force_json):
     req = urllib.request.Request(
-        OLLAMA_HOST + "/api/chat",
-        data=json.dumps(body).encode("utf-8"),
+        url + "?key=" + api_key,
+        data=json.dumps(_gemini_body(root_cause, evidence, force_json)).encode("utf-8"),
         headers={"content-type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return data["message"]["content"]
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _retry_delay(e, attempt):
+    """Seconds to wait before retrying: honor Gemini's retryDelay when provided."""
+    try:
+        body = e.read().decode("utf-8")
+        err = json.loads(body).get("error", {})
+        delay = err.get("retryDelay")
+        if not delay:
+            for d in err.get("details", []):
+                if d.get("@type", "").endswith("RetryInfo") and d.get("retryDelay"):
+                    delay = d["retryDelay"]
+                    break
+        if not delay:
+            m = re.search(r"[Rr]etry in ([\d.]+)s", err.get("message", ""))
+            if m:
+                delay = m.group(1) + "s"
+        if delay:
+            return min(float(str(delay).rstrip("s")), 120)
+    except Exception:
+        pass
+    return min(2 ** attempt + random.uniform(0, 1), 60)
+
+
+def _call_gemini(root_cause, evidence, api_key, timeout):
+    primary = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    models = [primary] + [m for m in _MODEL_FALLBACKS if m != primary]
+    last_err = None
+    for model in models:
+        url = f"{GEMINI_URL}/{model}:generateContent"
+        data = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                data = _gemini_once(url, api_key, root_cause, evidence, timeout, True)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 400:  # model may not support JSON mode -> retry once without it
+                    try:
+                        data = _gemini_once(url, api_key, root_cause, evidence, timeout, False)
+                        break
+                    except urllib.error.HTTPError as e2:
+                        e = e2
+                last_err = e
+                # 429 = per-model daily quota exhausted -> try next model immediately
+                if e.code == 429:
+                    break
+                if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES - 1:
+                    if e.code in RETRYABLE_CODES:
+                        break  # next model
+                    raise
+                time.sleep(_retry_delay(e, attempt))
+        if data is not None:
+            candidates = (data or {}).get("candidates", []) or []
+            if not candidates:
+                raise RuntimeError("no candidates: " + json.dumps(data)[:200])
+            return "".join(p.get("text", "") for p in candidates[0]["content"]["parts"])
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("all Gemini models failed")
+
+
+def _parse_severity(text):
+    try:
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            obj = json.loads(text[start:end + 1])
+            sev = obj.get("severity")
+            if isinstance(sev, str):
+                sev = sev.capitalize()
+            if sev in SEVERITY_LEVELS:
+                return sev, obj.get("reason")
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r'"(severity)"\s*:\s*"([A-Za-z]+)"', text)
+    if not m:
+        return None, None
+    sev = m.group(1).capitalize()
+    if sev not in SEVERITY_LEVELS:
+        return None, None
+    rm = re.search(r'"(reason)"\s*:\s*"((?:\\.|[^"\\])*)"', text)
+    return sev, rm.group(2) if rm else None
 
 
 def _try_llm(root_cause, evidence, timeout):
-    """Try providers in order, raising on total failure. Returns (severity, reason, provider)."""
+    """Gemini, raising on total failure. Returns (severity, reason, provider)."""
     provider = PROVIDER
     if provider == "none":
         raise RuntimeError("SEVERITY_LLM_PROVIDER=none (disabled)")
-    if provider == "ollama":
-        return *_parse_severity(_call_ollama(root_cause, evidence, OLLAMA_MODEL, timeout)), "ollama"
-    if provider == "gemini":
-        key = os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise RuntimeError("GEMINI_API_KEY not set")
-        return *_parse_severity(_call_gemini(root_cause, evidence, key, GEMINI_MODEL, timeout)), "gemini"
-    # auto: local Ollama first (free, no rate limits), then Gemini free tier, then policy
-    if _ollama_up(OLLAMA_HOST):
-        return *_parse_severity(_call_ollama(root_cause, evidence, OLLAMA_MODEL, timeout)), "ollama"
-    if os.environ.get("GEMINI_API_KEY"):
-        key = os.environ["GEMINI_API_KEY"]
-        return *_parse_severity(_call_gemini(root_cause, evidence, key, GEMINI_MODEL, timeout)), "gemini"
-    raise RuntimeError("no LLM available (no Ollama, no GEMINI_API_KEY)")
+    if provider != "gemini":
+        raise RuntimeError(f"unsupported SEVERITY_LLM_PROVIDER={provider!r}")
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY not set")
+    return *_parse_severity(_call_gemini(root_cause, evidence, key, timeout)), "gemini"
 
 
-def classify_severity(root_cause, evidence, api_key=None, model=None, timeout=120):
-    """LLM severity (local Ollama first = free, unlimited; Gemini free tier optional),
-    deterministic policy as final fallback. Returns (severity, source, reason).
-    `root_cause` is the predicted root cause; `evidence` a text block of error lines."""
+def classify_severity(root_cause, evidence, api_key=None, model=None, timeout=120, fallback_policy=True):
+    """Gemini severity with deterministic policy as fallback.
+    With fallback_policy=False, a failed/unparseable LLM call returns
+    (None, None, reason) so callers can leave llm_severity NULL instead of
+    storing a misleading rule-based verdict.
+    Returns (severity, source, reason) or (None, None, reason)."""
     if api_key:
         os.environ["GEMINI_API_KEY"] = api_key
     if model:
-        os.environ["OLLAMA_MODEL"] = model
         os.environ["GEMINI_MODEL"] = model
     try:
         sev, reason, provider = _try_llm(root_cause, evidence, timeout)
         if sev is not None:
             return sev, provider, reason or ""
-        return policy_severity(root_cause, evidence), "policy", "unparseable LLM output"
+        if fallback_policy:
+            return policy_severity(root_cause, evidence), "policy", "unparseable LLM output"
+        return None, None, "unparseable LLM output"
     except Exception as e:
-        return policy_severity(root_cause, evidence), "policy", f"llm error: {type(e).__name__}: {e}"
+        if fallback_policy:
+            return policy_severity(root_cause, evidence), "policy", f"llm error: {type(e).__name__}: {e}"
+        return None, None, f"llm error: {type(e).__name__}: {e}"

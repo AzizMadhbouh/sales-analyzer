@@ -212,6 +212,68 @@
     },
     {
       "id": 4,
+      "type": "stat",
+      "title": "Latest Build LLM Severity",
+      "datasource": {
+        "type": "postgres",
+        "uid": "buildhistory"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "buildhistory"
+          },
+          "format": "table",
+          "group": [],
+          "hide": false,
+          "rawSql": "SELECT llm_severity FROM builds ORDER BY timestamp DESC LIMIT 1",
+          "refId": "A"
+        }
+      ],
+      "interval": ""
+    },
+    {
+      "id": 5,
       "type": "timeseries",
       "title": "Issue Severity Trend",
       "datasource": {
@@ -325,14 +387,14 @@
             "uid": "buildhistory"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(b.timestamp) AS time, i.severity, count(*)::int AS n FROM build_issues i JOIN builds b ON b.build_id = i.build_id WHERE $__timeFilter(b.timestamp) AND i.severity IS NOT NULL GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT $__time(b.timestamp), i.severity, count(*)::int AS n FROM build_issues i JOIN builds b ON b.build_id = i.build_id WHERE $__timeFilter(b.timestamp) AND i.severity IS NOT NULL GROUP BY 1, 2 ORDER BY 1",
           "refId": "A",
           "hide": false
         }
       ]
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "timeseries",
       "title": "Errors & Warnings per Build",
       "datasource": {
@@ -402,7 +464,7 @@
       ]
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "barchart",
       "title": "Issues by Severity",
       "datasource": {
@@ -468,7 +530,7 @@
       ]
     },
     {
-      "id": 7,
+      "id": 8,
       "type": "piechart",
       "title": "Severity Distribution",
       "datasource": {
@@ -537,7 +599,7 @@
       ]
     },
     {
-      "id": 8,
+      "id": 9,
       "type": "table",
       "title": "Latest Builds",
       "datasource": {
@@ -578,6 +640,44 @@
             "matcher": {
               "id": "byName",
               "options": "worst_severity"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Critical": {
+                        "text": "Critical",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "High": {
+                        "text": "High",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "Medium": {
+                        "text": "Medium",
+                        "color": "yellow",
+                        "index": 2
+                      },
+                      "Low": {
+                        "text": "Low",
+                        "color": "green",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "llm_severity"
             },
             "properties": [
               {
@@ -666,7 +766,7 @@
           "format": "table",
           "group": [],
           "hide": false,
-          "rawSql": "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, b.error_count, b.warning_count, COALESCE(w.worst, '-') AS worst_severity FROM builds b LEFT JOIN LATERAL (SELECT i.severity AS worst FROM build_issues i WHERE i.build_id = b.build_id ORDER BY CASE i.severity WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END DESC LIMIT 1) w ON true ORDER BY b.timestamp DESC LIMIT 20",
+          "rawSql": "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, b.error_count, b.warning_count, COALESCE(w.worst, '-') AS worst_severity, COALESCE(b.llm_severity, '-') AS llm_severity, COALESCE(b.category, '-') AS category FROM builds b LEFT JOIN LATERAL (SELECT i.severity AS worst FROM build_issues i WHERE i.build_id = b.build_id ORDER BY CASE i.severity WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END DESC LIMIT 1) w ON true ORDER BY b.timestamp DESC LIMIT 100",
           "refId": "A"
         }
       ]

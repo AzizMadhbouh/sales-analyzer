@@ -70,6 +70,10 @@ def ensure_schema():
     """)
     cur.execute("ALTER TABLE build_issues ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP")
     cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS result TEXT")
+    cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS llm_severity TEXT")
+    cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS severity_source TEXT")
+    cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS severity_reason TEXT")
+    cur.execute("ALTER TABLE builds ADD COLUMN IF NOT EXISTS category TEXT")
     conn.commit()
     conn.close()
 

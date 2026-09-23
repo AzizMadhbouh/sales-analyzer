@@ -356,6 +356,270 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 5,
+      "type": "piechart",
+      "title": "Category Distribution",
+      "datasource": {
+        "type": "postgres",
+        "uid": "buildhistory"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayLabels": [
+          "name",
+          "value"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            ""
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "buildhistory"
+          },
+          "format": "table",
+          "group": [],
+          "hide": false,
+          "rawSql": "SELECT COALESCE(category, 'unknown') AS category, count(*)::int AS n FROM builds GROUP BY category ORDER BY n DESC",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Category Trend",
+      "datasource": {
+        "type": "postgres",
+        "uid": "buildhistory"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "spanNulls": true,
+            "showPoints": "never"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "buildhistory"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(b.timestamp), COALESCE(b.category, 'unknown') AS category, count(*)::int AS n FROM builds b WHERE $__timeFilter(b.timestamp) AND b.category IS NOT NULL GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A",
+          "hide": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Latest Builds with Category",
+      "datasource": {
+        "type": "postgres",
+        "uid": "buildhistory"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "llm_severity"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Critical": {
+                        "text": "Critical",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "High": {
+                        "text": "High",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "Medium": {
+                        "text": "Medium",
+                        "color": "yellow",
+                        "index": 2
+                      },
+                      "Low": {
+                        "text": "Low",
+                        "color": "green",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text",
+                  "mode": "background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "SUCCESS": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "FAILURE": {
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": true,
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "buildhistory"
+          },
+          "format": "table",
+          "group": [],
+          "hide": false,
+          "rawSql": "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, COALESCE(b.category, '-') AS category, COALESCE(b.llm_severity, '-') AS llm_severity, b.error_count, b.warning_count FROM builds b ORDER BY b.timestamp DESC LIMIT 50",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

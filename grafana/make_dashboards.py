@@ -104,6 +104,9 @@ def seq(panels):
     return panels
 
 
+CATEGORY_SQL = "SELECT COALESCE(category, 'unknown') AS category, count(*)::int AS n FROM builds GROUP BY category ORDER BY n DESC"
+CATEGORY_TREND_SQL = "SELECT $__time(b.timestamp), COALESCE(b.category, 'unknown') AS category, count(*)::int AS n FROM builds b WHERE $__timeFilter(b.timestamp) AND b.category IS NOT NULL GROUP BY 1, 2 ORDER BY 1"
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -126,8 +129,9 @@ def main():
             statistic("Total Builds", "SELECT count(*) FROM builds WHERE $__timeFilter(timestamp)"),
             statistic("Failure Rate %", "SELECT COALESCE(count(*) FILTER (WHERE result = 'FAILURE') * 100.0 / NULLIF(count(*), 0), 0) AS rate FROM builds WHERE $__timeFilter(timestamp)", unit="percent"),
             statistic("Critical/High Issues", "SELECT count(*) FROM build_issues i JOIN builds b ON b.build_id = i.build_id WHERE $__timeFilter(b.timestamp) AND i.severity IN ('Critical', 'High')"),
+            statistic("Latest Build LLM Severity", "SELECT llm_severity FROM builds ORDER BY timestamp DESC LIMIT 1"),
             timeseries("Issue Severity Trend", [
-                {"datasource": DS, "format": "time_series", "rawSql": "SELECT $__time(b.timestamp) AS time, i.severity, count(*)::int AS n FROM build_issues i JOIN builds b ON b.build_id = i.build_id WHERE $__timeFilter(b.timestamp) AND i.severity IS NOT NULL GROUP BY 1, 2 ORDER BY 1", "refId": "A", "hide": False},
+                {"datasource": DS, "format": "time_series", "rawSql": "SELECT $__time(b.timestamp), i.severity, count(*)::int AS n FROM build_issues i JOIN builds b ON b.build_id = i.build_id WHERE $__timeFilter(b.timestamp) AND i.severity IS NOT NULL GROUP BY 1, 2 ORDER BY 1", "refId": "A", "hide": False},
             ], {"h": 8, "w": 12, "x": 0, "y": 0}, overrides=[{"matcher": {"id": "byName", "options": "Critical"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "High"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Medium"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Low"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]}]),
             timeseries("Errors & Warnings per Build", [
                 {"datasource": DS, "format": "time_series", "rawSql": "SELECT $__time(timestamp), error_count AS \"errors\" FROM builds WHERE $__timeFilter(timestamp)", "refId": "A", "hide": False},
@@ -135,8 +139,9 @@ def main():
             ], {"h": 8, "w": 12, "x": 12, "y": 0}),
             barchar("Issues by Severity", "SELECT severity, count(*)::int AS n FROM build_issues GROUP BY severity ORDER BY n DESC", {"h": 9, "w": 12, "x": 0, "y": 0}),
             piechart("Severity Distribution", "SELECT severity, count(*)::int AS n FROM build_issues GROUP BY severity ORDER BY n DESC", {"h": 9, "w": 12, "x": 12, "y": 0}),
-            table("Latest Builds", "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, b.error_count, b.warning_count, COALESCE(w.worst, '-') AS worst_severity FROM builds b LEFT JOIN LATERAL (SELECT i.severity AS worst FROM build_issues i WHERE i.build_id = b.build_id ORDER BY CASE i.severity WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END DESC LIMIT 1) w ON true ORDER BY b.timestamp DESC LIMIT 20", {"h": 10, "w": 24, "x": 0, "y": 0}, overrides=[
+            table("Latest Builds", "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, b.error_count, b.warning_count, COALESCE(w.worst, '-') AS worst_severity, COALESCE(b.llm_severity, '-') AS llm_severity, COALESCE(b.category, '-') AS category FROM builds b LEFT JOIN LATERAL (SELECT i.severity AS worst FROM build_issues i WHERE i.build_id = b.build_id ORDER BY CASE i.severity WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END DESC LIMIT 1) w ON true ORDER BY b.timestamp DESC LIMIT 100", {"h": 10, "w": 24, "x": 0, "y": 0}, overrides=[
                 {"matcher": {"id": "byName", "options": "worst_severity"}, "properties": [{"id": "mappings", "value": [SEV_MAPPINGS]}]},
+                {"matcher": {"id": "byName", "options": "llm_severity"}, "properties": [{"id": "mappings", "value": [SEV_MAPPINGS]}]},
                 {"matcher": {"id": "byName", "options": "result"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-text", "mode": "background"}}, {"id": "mappings", "value": [{"type": "value", "options": {"SUCCESS": {"color": "green", "index": 0}, "FAILURE": {"color": "red", "index": 1}}}]}]},
             ]),
         ]),
@@ -164,6 +169,14 @@ def main():
             table("Issue Detail", "SELECT build_id, timestamp, severity, COALESCE(category, 'other') AS category, line, is_error FROM build_issues WHERE $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 100", {"h": 12, "w": 24, "x": 0, "y": 0}, overrides=[
                 {"matcher": {"id": "byName", "options": "is_error"}, "properties": [{"id": "mappings", "value": [{"type": "value", "options": {"true": {"text": "error", "color": "red", "index": 0}, "false": {"text": "warning", "color": "yellow", "index": 1}}}]}]},
                 {"matcher": {"id": "byName", "options": "severity"}, "properties": [{"id": "mappings", "value": [SEV_MAPPINGS]}]},
+            ]),
+            piechart("Category Distribution", CATEGORY_SQL, {"h": 9, "w": 8, "x": 0, "y": 13}),
+            timeseries("Category Trend", [
+                {"datasource": DS, "format": "time_series", "rawSql": CATEGORY_TREND_SQL, "refId": "A", "hide": False},
+            ], {"h": 8, "w": 16, "x": 8, "y": 13}),
+            table("Latest Builds with Category", "SELECT b.build_id, b.timestamp, COALESCE(b.result, '?') AS result, COALESCE(b.category, '-') AS category, COALESCE(b.llm_severity, '-') AS llm_severity, b.error_count, b.warning_count FROM builds b ORDER BY b.timestamp DESC LIMIT 50", {"h": 10, "w": 24, "x": 0, "y": 21}, overrides=[
+                {"matcher": {"id": "byName", "options": "llm_severity"}, "properties": [{"id": "mappings", "value": [SEV_MAPPINGS]}]},
+                {"matcher": {"id": "byName", "options": "result"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-text", "mode": "background"}}, {"id": "mappings", "value": [{"type": "value", "options": {"SUCCESS": {"color": "green", "index": 0}, "FAILURE": {"color": "red", "index": 1}}}]}]},
             ]),
         ]),
     }

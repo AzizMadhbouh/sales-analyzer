@@ -83,12 +83,15 @@ def extract_evidence_lines(text, limit=15, max_chars=8000):
     """Deduplicated, order-preserving error/warning lines used as evidence and LLM fuel."""
     seen, out = set(), []
     for raw in text.splitlines():
-        s = raw.strip()
+        s = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+        s = re.sub(r"ha://\S+", "", s).strip()
         if not s or s in seen:
             continue
         if not _ERROR_RE.search(s):
             continue
         if s.startswith("[Pipeline]") or s.startswith("Running on") or re.match(r"^\s*\[", s):
+            continue
+        if s.startswith("> ") or "# timeout=" in s:  # Jenkins git/checkout command echoes
             continue
         seen.add(s)
         out.append(s[:300])

@@ -11,12 +11,26 @@ Usage:
     python feed_jenkins_builds.py --clear             # delete rows first
 """
 import argparse
+import os
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k, v)
 
 from analyze_history import ensure_schema, get_db_conn
+from ml.severity_llm import classify_severity
+from ml.rootcause_model import extract_evidence_lines
+from ml.category_model import predict_category
 
 WSL_DISTRO = "Ubuntu"
 CONTAINER = "jenkins"
@@ -159,7 +173,7 @@ def parse_log(log_text):
     return {"error_count": len(errors), "warning_count": len(warnings), "errors": errors, "warnings": warnings}
 
 
-def ingest_build(cur, n, require_complete=True):
+def ingest_build(cur, n, require_complete=True, llm=True):
     """Fetch one build from Jenkins and upsert it into Postgres. Returns True if data was written."""
     meta, log = fetch_build(n)
     if meta is None or not log.strip():
@@ -168,6 +182,22 @@ def ingest_build(cur, n, require_complete=True):
     if require_complete and (result is None or "<completed>true" not in meta):
         return False
     parsed = parse_log(log)
+    is_clean = (
+        result == "SUCCESS"
+        and parsed["error_count"] == 0
+        and parsed["warning_count"] == 0
+    )
+    _, evidence = extract_evidence_lines(log)
+    if not evidence:
+        evidence = "\n".join(
+            i["line"] for i in parsed["errors"] + parsed["warnings"]
+        )
+    if is_clean:
+        category = "clean"
+    elif evidence:
+        category, _, _ = predict_category(evidence)
+    else:
+        category, _, _ = predict_category(log[-10000:])
     cur.execute("DELETE FROM build_issues WHERE build_id = %s", (n,))
     cur.execute(
         "INSERT INTO builds (build_id, timestamp, error_count, warning_count, trend, result) "
@@ -176,6 +206,10 @@ def ingest_build(cur, n, require_complete=True):
         "timestamp = EXCLUDED.timestamp, error_count = EXCLUDED.error_count, "
         "warning_count = EXCLUDED.warning_count, result = EXCLUDED.result",
         (n, ts, parsed["error_count"], parsed["warning_count"], "", result),
+    )
+    cur.execute(
+        "UPDATE builds SET category = %s WHERE build_id = %s",
+        (category, n),
     )
     for e in parsed["errors"]:
         cur.execute(
@@ -189,6 +223,21 @@ def ingest_build(cur, n, require_complete=True):
             "VALUES (%s, %s, %s, %s, %s, %s)",
             (n, ts, w["severity"], w["category"], w["line"], False),
         )
+    if llm:
+        cur.execute("SELECT llm_severity FROM builds WHERE build_id = %s", (n,))
+        if cur.fetchone()[0] is None:
+            if is_clean:
+                sev, source, reason = "Low", "policy", "Clean build: 0 errors, 0 warnings, all tests pass"
+            else:
+                sev, source, reason = classify_severity(
+                    category, evidence, fallback_policy=False
+                )
+            if sev is not None:
+                cur.execute(
+                    "UPDATE builds SET llm_severity = %s, severity_source = %s, severity_reason = %s "
+                    "WHERE build_id = %s",
+                    (sev, source, reason, n),
+                )
     return True
 
 
@@ -197,12 +246,13 @@ def max_build_in_db(cur):
     return cur.fetchone()[0]
 
 
-def ingest_many(cur, builds, verbose=True):
+def ingest_many(cur, builds, verbose=True, llm=True):
     written = 0
     for n in builds:
-        ok = ingest_build(cur, n)
+        ok = ingest_build(cur, n, llm=llm)
         if verbose and ok:
-            print(f"  {n}: ingested")
+            print(f"  {n}: ingested", flush=True)
+        cur.connection.commit()
         written += int(ok)
     return written
 
@@ -211,6 +261,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", type=int, default=0)
     ap.add_argument("--clear", action="store_true")
+    ap.add_argument("--no-llm", action="store_true", help="skip LLM severity (rule-based only)")
     args = ap.parse_args()
 
     builds = [n for n in list_builds() if n >= args.since]
@@ -226,7 +277,7 @@ def main():
         conn.commit()
         print("Cleared existing rows.")
 
-    written = ingest_many(cur, builds)
+    written = ingest_many(cur, builds, llm=not args.no_llm)
     conn.commit()
     conn.close()
     print(f"Done. {written}/{len(builds)} builds ingested.")
